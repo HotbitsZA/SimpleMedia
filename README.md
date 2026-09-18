@@ -12,8 +12,10 @@ live H.264 + Opus over RTP/UDP.
   window so playback can be watched without a custom renderer.
 - `SimpleMedia::AudioOutput` — pipes the decoded PCM blocks to the system's default
   audio device so video playback is actually audible.
-- `SimpleMedia::VideoStreamer` — push RGBA frames and S16LE audio into a live
-  H.264 (`x264enc`/`vtenc_h264`) + Opus RTP broadcast to any UDP host.
+- `SimpleMedia::VideoStreamer` — two ways to broadcast H.264 (`x264enc`/`vtenc_h264`) + Opus
+  RTP to any UDP host: push raw RGBA frames + S16LE audio yourself, or hand it a
+  media source (file path / URL) with `streamSource()` and let the library decode
+  and stream it end-to-end.
 - Zero warnings with `-Wall -Wextra` (AppleClang 21 / GCC 13).
 - Optional Dear ImGui + GLFW GUI examples.
 
@@ -102,8 +104,17 @@ Then broadcast:
 ./build/stream_app media/Big_Buck_Bunny_1080_10s_30MB.mp4 <host> 5000 5002
 ```
 
-If the source has no audio track (the bundled clip is video-only), the streamer
-synthesises silence so the audio branch keeps flowing and the pipeline never stalls.
+The example is a thin wrapper around the library's one-call `streamSource()`:
+
+```cpp
+SimpleMedia::VideoStreamer streamer;
+streamer.streamSource("clip.mp4", "192.168.1.10", 5000, 5002); // blocks until EOS
+```
+
+`streamSource()` builds the encoder pipeline, decodes the source internally and
+feeds it into the stream until the source ends or errors. If the source has no
+audio track (the bundled clip is video-only), the streamer synthesises silence so
+the audio branch keeps flowing and the pipeline never stalls.
 
 ## API at a glance
 
@@ -122,11 +133,24 @@ audioOut.open();
 player.play();
 
 // --- stream ---
+// (a) Stream a media source end-to-end (file path or URL). Blocks until the
+//     source finishes or errors.
 SimpleMedia::VideoStreamer streamer;
-streamer.setupStream("192.168.1.10", 5000, 5002, 1280, 720);
-streamer.start();
-streamer.pushFrame(rgbaBuffer);     // 1280x720 RGBA, call at ~30 FPS
-streamer.pushAudio(pcm16, nBytes);  // optional; silence is sent otherwise
+streamer.streamSource("clip.mp4", "192.168.1.10", 5000, 5002);
+
+// (b) Non-blocking: returns immediately; onFinished runs on an internal thread
+//     when the stream ends (true on full EOS, false on error/cancellation).
+streamer.startStreamingSource("clip.mp4", "192.168.1.10", 5000, 5002,
+                              [](bool ok) { std::printf("stream done: %d\n", ok); });
+// ... later, to cancel an in-flight stream:
+streamer.stop();
+
+// (c) Or feed raw frames yourself (e.g. from a camera):
+SimpleMedia::VideoStreamer enc;
+enc.setupStream("192.168.1.10", 5000, 5002, 1280, 720);
+enc.start();
+enc.pushFrame(rgbaBuffer);     // 1280x720 RGBA, call at ~30 FPS
+enc.pushAudio(pcm16, nBytes);  // optional; silence is sent otherwise
 ```
 
 ### macOS note

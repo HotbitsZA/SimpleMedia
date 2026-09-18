@@ -209,6 +209,27 @@ namespace SimpleMedia
         bool setupStream(const std::string &destinationIp, int videoPort, int audioPort,
                          int width = 1280, int height = 720);
 
+        // One-call streaming of a media source (file path or HTTP/RTSP URL).
+        // Builds the H.264/Opus RTP broadcast, decodes the source and pushes
+        // it into the stream until the source ends or an error occurs. Blocks
+        // the calling thread. Returns true when the source streamed fully.
+        bool streamSource(const std::string &source,
+                          const std::string &destinationIp,
+                          int videoPort, int audioPort,
+                          int width = 1280, int height = 720);
+
+        // Asynchronous variant of streamSource(): starts streaming in the
+        // background and returns immediately. onFinished is invoked on an
+        // internal thread when the stream ends, with true on a full stream
+        // (EOS) or false on error/cancellation. Call stop() to cancel an
+        // in-flight stream; the streamer must outlive the callback (do not
+        // destroy it from within onFinished).
+        void startStreamingSource(const std::string &source,
+                                  const std::string &destinationIp,
+                                  int videoPort, int audioPort,
+                                  std::function<void(bool)> onFinished = {},
+                                  int width = 1280, int height = 720);
+
         void start();
         void stop();
 
