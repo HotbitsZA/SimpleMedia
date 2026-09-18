@@ -19,6 +19,9 @@
 //     (e.g. into a SharedFrameBuffer) if you need it later.
 //   * setFrameCallback / setAudioCallback may be called from any thread; the
 //     library protects the callbacks internally with a mutex.
+//   * Audio is delivered as raw PCM via setAudioCallback; no output device is
+//     opened by VideoPlayer itself. Forward the decoded blocks to an AudioOutput
+//     to actually hear them.
 namespace SimpleMedia
 {
     // Raw decoded video frame handed to the frame callback.
@@ -108,6 +111,40 @@ namespace SimpleMedia
 
     private:
         std::unique_ptr<Impl> pImpl; // Hides GStreamer headers from the user
+    };
+
+    // Routes decoded PCM audio to the system's default audio output device.
+    // Forward the AudioFrames delivered by VideoPlayer::setAudioCallback here
+    // so the sound actually reaches the speakers.
+    class AudioOutput
+    {
+    public:
+        struct Impl;
+
+        AudioOutput();
+        ~AudioOutput();
+
+        // Non-copyable: the implementation owns GStreamer objects.
+        AudioOutput(const AudioOutput &) = delete;
+        AudioOutput &operator=(const AudioOutput &) = delete;
+        AudioOutput(AudioOutput &&) noexcept;
+        AudioOutput &operator=(AudioOutput &&) noexcept;
+
+        // Opens the default audio output device. Returns false when no device
+        // is available; write() then becomes a no-op.
+        bool open();
+
+        // Plays one decoded audio block (interleaved S16LE PCM).
+        void write(const AudioFrame &frame);
+
+        // Volume in the range 0.0 (mute) .. 1.0 (max).
+        void setVolume(double volume);
+
+        // Stops the device and releases the audio pipeline.
+        void stop();
+
+    private:
+        std::unique_ptr<Impl> pImpl;
     };
 
     // Network streaming pipeline: pushes raw RGBA video and interleaved

@@ -34,6 +34,7 @@ pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET
 add_library(SimpleMedia STATIC
     src/VideoPlayer.cpp
     src/VideoStreamer.cpp
+    src/AudioOutput.cpp
 )
 target_include_directories(SimpleMedia PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

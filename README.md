@@ -8,6 +8,8 @@ live H.264 + Opus over RTP/UDP.
 
 - `SimpleMedia::VideoPlayer` — decode and play local files, HTTP(S)/RTSP URLs, or raw
   `gst-launch` style pipelines; receive decoded frames/audio via callbacks.
+- `SimpleMedia::AudioOutput` — pipes the decoded PCM blocks to the system's default
+  audio device so video playback is actually audible.
 - `SimpleMedia::VideoStreamer` — push RGBA frames and S16LE audio into a live
   H.264 (`x264enc`/`vtenc_h264`) + Opus RTP broadcast to any UDP host.
 - Zero warnings with `-Wall -Wextra` (AppleClang 21 / GCC 13).
@@ -108,9 +110,11 @@ synthesises silence so the audio branch keeps flowing and the pipeline never sta
 
 // --- decode/play ---
 SimpleMedia::VideoPlayer player;
-player.setFrameCallback([](const SimpleMedia::VideoFrame &f) { /* RGBA pixels */ });
-player.setAudioCallback([](const SimpleMedia::AudioFrame &a) { /* S16LE audio */ });
+SimpleMedia::AudioOutput audioOut; // route decoded PCM to the speakers
+player.setFrameCallback([](const SimpleMedia::VideoFrame &f) { /* RGB pixels */ });
+player.setAudioCallback([&audioOut](const SimpleMedia::AudioFrame &a) { audioOut.write(a); });
 player.load("clip.mp4");
+audioOut.open();
 player.play();
 
 // --- stream ---

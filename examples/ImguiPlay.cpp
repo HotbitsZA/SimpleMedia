@@ -52,15 +52,19 @@ int main(int argc, char **argv)
 
     // Thread-safe bridge between GStreamer and the render loop.
     SimpleMedia::SharedFrameBuffer videoBridge;
+    SimpleMedia::AudioOutput audioOut;
     SimpleMedia::VideoPlayer player;
     player.setFrameCallback([&videoBridge](const SimpleMedia::VideoFrame &frame)
                             { videoBridge.update(frame.pixels, frame.width, frame.height); });
+    player.setAudioCallback([&audioOut](const SimpleMedia::AudioFrame &frame)
+                            { audioOut.write(frame); });
 
     if (!player.load(source))
     {
         std::cerr << "Failed to load: " << source << std::endl;
         return 1;
     }
+    audioOut.open();
     player.play();
 
     GLuint videoTextureId = 0;
@@ -118,6 +122,7 @@ int main(int argc, char **argv)
     }
 
     player.stop();
+    audioOut.stop();
     glDeleteTextures(1, &videoTextureId);
 
     ImGui_ImplOpenGL3_Shutdown();

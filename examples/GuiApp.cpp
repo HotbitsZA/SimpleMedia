@@ -52,7 +52,8 @@ namespace
         "rtpbin. ! rtph264depay ! decodebin ! videoconvert ! appsink name=videosink "
         "udpsrc port=5002 caps=\"application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS\""
         " ! rtpbin.recv_rtp_sink_1 "
-        "rtpbin. ! rtpopusdepay ! decodebin ! audioconvert ! appsink name=audiosink";
+        "rtpbin. ! rtpopusdepay ! decodebin ! audioconvert "
+        "! appsink name=audiosink caps=\"audio/x-raw, format=S16LE, layout=interleaved\"";
 } // namespace
 
 int main(int argc, char **argv)
@@ -90,17 +91,23 @@ int main(int argc, char **argv)
     ImGui_ImplOpenGL3_Init("#version 330");
 
     RenderContext ctx;
+    SimpleMedia::AudioOutput audioOut;
     SimpleMedia::VideoPlayer player;
 
     // Copy freshly decoded frames into the shared bridge from GStreamer threads.
     player.setFrameCallback([&ctx](const SimpleMedia::VideoFrame &frame)
                             { ctx.frameBuffer.update(frame.pixels, frame.width, frame.height); });
+    // Route decoded audio to the system output device.
+    player.setAudioCallback([&audioOut](const SimpleMedia::AudioFrame &frame)
+                            { audioOut.write(frame); });
 
     if (!player.load(source))
     {
         std::cerr << "Failed to load media source: " << source << std::endl;
         return 1;
     }
+    audioOut.open();
+    audioOut.setVolume(0.8);
     player.play();
 
     glGenTextures(1, &ctx.openGlTextureId);
@@ -148,6 +155,7 @@ int main(int argc, char **argv)
         if (ImGui::SliderFloat("Audio Volume", &currentVolume, 0.0f, 1.0f))
         {
             player.setVolume(static_cast<double>(currentVolume));
+            audioOut.setVolume(static_cast<double>(currentVolume));
         }
 
         ImGui::Separator();
@@ -179,6 +187,7 @@ int main(int argc, char **argv)
     }
 
     player.stop();
+    audioOut.stop();
     glDeleteTextures(1, &ctx.openGlTextureId);
 
     ImGui_ImplOpenGL3_Shutdown();

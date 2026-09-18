@@ -66,9 +66,12 @@ int main(int argc, char **argv)
         }
     }
 
+    SimpleMedia::AudioOutput audioOut;
     SimpleMedia::VideoPlayer player;
     player.setFrameCallback(onVideoFrameReceived);
-    player.setAudioCallback(onAudioFrameReceived);
+    //player.setAudioCallback(onAudioFrameReceived);
+    player.setAudioCallback([&audioOut](const SimpleMedia::AudioFrame &frame)
+                            { audioOut.write(frame); });
 
     std::printf("Loading media source: %s\n", source.c_str());
     if (!player.load(source))
@@ -77,6 +80,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    audioOut.open();
     player.play();
     player.setVolume(0.8);
     std::printf("Playback started. Running for %d seconds...\n", seconds);
@@ -88,5 +92,6 @@ int main(int argc, char **argv)
 
     std::printf("Shutting down...\n");
     player.stop();
+    audioOut.stop();
     return 0;
 }
