@@ -35,6 +35,8 @@ add_library(SimpleMedia STATIC
     src/VideoPlayer.cpp
     src/VideoStreamer.cpp
     src/AudioOutput.cpp
+    src/VideoOutput.cpp
+    src/MainLoop.cpp
 )
 target_include_directories(SimpleMedia PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -42,6 +44,9 @@ target_include_directories(SimpleMedia PUBLIC
 )
 target_link_libraries(SimpleMedia PUBLIC PkgConfig::GSTREAMER)
 target_compile_options(SimpleMedia PRIVATE -Wall -Wextra)
+if(APPLE)
+    target_link_libraries(SimpleMedia PUBLIC "-framework Cocoa")
+endif()
 
 # ---------------------------------------------------------------------------
 # Examples

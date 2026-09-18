@@ -8,6 +8,8 @@ live H.264 + Opus over RTP/UDP.
 
 - `SimpleMedia::VideoPlayer` — decode and play local files, HTTP(S)/RTSP URLs, or raw
   `gst-launch` style pipelines; receive decoded frames/audio via callbacks.
+- `SimpleMedia::VideoOutput` — shows decoded frames in the system's default video
+  window so playback can be watched without a custom renderer.
 - `SimpleMedia::AudioOutput` — pipes the decoded PCM blocks to the system's default
   audio device so video playback is actually audible.
 - `SimpleMedia::VideoStreamer` — push RGBA frames and S16LE audio into a live
@@ -110,10 +112,12 @@ synthesises silence so the audio branch keeps flowing and the pipeline never sta
 
 // --- decode/play ---
 SimpleMedia::VideoPlayer player;
+SimpleMedia::VideoOutput videoOut; // show decoded frames in a native window
 SimpleMedia::AudioOutput audioOut; // route decoded PCM to the speakers
-player.setFrameCallback([](const SimpleMedia::VideoFrame &f) { /* RGB pixels */ });
+player.setFrameCallback([&videoOut](const SimpleMedia::VideoFrame &f) { videoOut.write(f); });
 player.setAudioCallback([&audioOut](const SimpleMedia::AudioFrame &a) { audioOut.write(a); });
 player.load("clip.mp4");
+videoOut.open();
 audioOut.open();
 player.play();
 
@@ -124,6 +128,28 @@ streamer.start();
 streamer.pushFrame(rgbaBuffer);     // 1280x720 RGBA, call at ~30 FPS
 streamer.pushAudio(pcm16, nBytes);  // optional; silence is sent otherwise
 ```
+
+### macOS note
+
+Native GStreamer video windows on macOS require the Cocoa main loop to pump on
+the main thread. Apps that use `VideoOutput` (or `playbin` with a non-appsink
+video sink) should start their logic via `SimpleMedia::runMain()`:
+
+```cpp
+int myApp(void *userData)
+{
+    // All your video / audio setup and sleep loops go here.
+    // This function runs on a worker thread; the main thread runs Cocoa.
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    return SimpleMedia::runMain(myApp, nullptr);
+}
+```
+
+On Linux and Windows this simply calls your function directly.
 
 ## License
 

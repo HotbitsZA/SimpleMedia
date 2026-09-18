@@ -23,7 +23,26 @@ namespace
 {
     constexpr int kWidth = 1280;
     constexpr int kHeight = 720;
-    constexpr const char *kSampleClipPath = "examples/media/Big_Buck_Bunny_1080_10s_30MB.mp4";
+    constexpr const char *kSampleClipCandidates[] = {
+        "examples/media/Big_Buck_Bunny_1080_10s_30MB.mp4",
+        "../examples/media/Big_Buck_Bunny_1080_10s_30MB.mp4",
+    };
+
+    // Returns the first clip candidate that actually exists, so stream_app
+    // works whether run from the repo root or from build/.
+    std::string resolveSampleClip()
+    {
+        for (const char *candidate : kSampleClipCandidates)
+        {
+            std::FILE *probe = std::fopen(candidate, "rb");
+            if (probe)
+            {
+                std::fclose(probe);
+                return candidate;
+            }
+        }
+        return kSampleClipCandidates[0]; // Let the pipeline report the error.
+    }
 
     // Turns a path (relative or absolute) or URL into a playbin-friendly URI.
     std::string toMediaUri(const std::string &source)
@@ -117,7 +136,7 @@ namespace
 
 int main(int argc, char **argv)
 {
-    const std::string filePath = argc > 1 ? argv[1] : kSampleClipPath;
+    const std::string filePath = argc > 1 ? argv[1] : resolveSampleClip();
     const std::string destinationIp = argc > 2 ? argv[2] : "127.0.0.1";
     const int videoPort = argc > 3 ? std::atoi(argv[3]) : 5000;
     const int audioPort = argc > 4 ? std::atoi(argv[4]) : 5002;

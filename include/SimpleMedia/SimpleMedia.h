@@ -24,6 +24,15 @@
 //     to actually hear them.
 namespace SimpleMedia
 {
+    // Platform bootstrap for apps that show native GStreamer video windows.
+    // On macOS the Cocoa main loop must run on the main thread (that is what
+    // touches GStreamer's glimagesink/osxvideosink) while the app logic runs
+    // on a worker thread. This wraps gst_macos_main() accordingly; on all
+    // other platforms it simply calls `func` on the calling thread. Blocks
+    // until `func` returns, then returns its result.
+    using MainFunction = int (*)(void *userData);
+    int runMain(MainFunction func, void *userData = nullptr);
+
     // Raw decoded video frame handed to the frame callback.
     struct VideoFrame
     {
@@ -111,6 +120,37 @@ namespace SimpleMedia
 
     private:
         std::unique_ptr<Impl> pImpl; // Hides GStreamer headers from the user
+    };
+
+    // Routes decoded video frames to the system's default video device
+    // (a native window). Forward the VideoFrames delivered by
+    // VideoPlayer::setFrameCallback here to display them on screen.
+    class VideoOutput
+    {
+    public:
+        struct Impl;
+
+        VideoOutput();
+        ~VideoOutput();
+
+        // Non-copyable: the implementation owns GStreamer objects.
+        VideoOutput(const VideoOutput &) = delete;
+        VideoOutput &operator=(const VideoOutput &) = delete;
+        VideoOutput(VideoOutput &&) noexcept;
+        VideoOutput &operator=(VideoOutput &&) noexcept;
+
+        // Opens the default video display device. Returns false when no display
+        // is available; write() then becomes a no-op.
+        bool open();
+
+        // Displays one decoded video frame (tightly-packed RGB pixels).
+        void write(const VideoFrame &frame);
+
+        // Closes the display window and releases the video pipeline.
+        void stop();
+
+    private:
+        std::unique_ptr<Impl> pImpl;
     };
 
     // Routes decoded PCM audio to the system's default audio output device.

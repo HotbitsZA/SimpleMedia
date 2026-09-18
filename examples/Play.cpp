@@ -1,11 +1,12 @@
 // Examples: play_app - plays a local file, HTTP/RTSP URL or raw pipeline
-// description through SimpleMedia and logs frame/audio telemetry.
+// description through SimpleMedia, showing video in a native window (with
+// both audio and video reaching the system devices) and logging telemetry.
 //
 //   ./play_app [media] [seconds]
 //
 //   media   - file path, http(s)/rtsp URL, or a gst-launch style pipeline
-//             string (defaults to the bundled Big Buck Bunny clip or a
-//             public RTSP test stream)
+//             string (defaults to the bundled Big Buck Bunny clip wherever
+//             you run it from, or a public test stream as last resort)
 //   seconds - how long to run before shutting down (default: 30)
 
 #include "SimpleMedia/SimpleMedia.h"
@@ -18,8 +19,28 @@
 
 namespace
 {
-    constexpr const char *kSampleClipPath = "examples/media/Big_Buck_Bunny_1080_10s_30MB.mp4";
+    // Located relative to the repo root or the build/ dir.
+    constexpr const char *kSampleClipCandidates[] = {
+        "examples/media/Big_Buck_Bunny_1080_10s_30MB.mp4",
+        "../examples/media/Big_Buck_Bunny_1080_10s_30MB.mp4",
+    };
     constexpr const char *kFallbackUrl = "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm";
+
+    // Returns the first clip candidate that actually exists, or the fallback
+    // URL. Robust to being launched from the repo root or from build/.
+    std::string resolveSampleClip()
+    {
+        for (const char *candidate : kSampleClipCandidates)
+        {
+            std::FILE *probe = std::fopen(candidate, "rb");
+            if (probe)
+            {
+                std::fclose(probe);
+                return candidate;
+            }
+        }
+        return kFallbackUrl;
+    }
 
     void onVideoFrameReceived(const SimpleMedia::VideoFrame &frame)
     {
@@ -34,64 +55,58 @@ namespace
         }
     }
 
-    void onAudioFrameReceived(const SimpleMedia::AudioFrame &frame)
+    struct PlayArgs
     {
-        static int audioBlockCounter = 0;
-        ++audioBlockCounter;
+        std::string source;
+        int seconds;
+    };
 
-        if (audioBlockCounter % 100 == 0)
+    int runPlayback(void *userData)
+    {
+        auto *args = static_cast<PlayArgs *>(userData);
+
+        SimpleMedia::AudioOutput audioOut;
+        SimpleMedia::VideoOutput videoOut;
+        SimpleMedia::VideoPlayer player;
+        player.setFrameCallback([&videoOut](const SimpleMedia::VideoFrame &frame)
+                                {
+            onVideoFrameReceived(frame);
+            videoOut.write(frame);
+        });
+        player.setAudioCallback([&audioOut](const SimpleMedia::AudioFrame &frame)
+                                { audioOut.write(frame); });
+
+        std::printf("Loading media source: %s\n", args->source.c_str());
+        if (!player.load(args->source))
         {
-            std::printf("[Audio] Block #%d  %zu bytes  %d Hz  %d ch\n",
-                        audioBlockCounter, frame.dataSize, frame.sampleRate, frame.channels);
+            std::fprintf(stderr, "Failed to build the playback pipeline.\n");
+            return 1;
         }
+
+        audioOut.open();
+        videoOut.open();
+        player.play();
+        player.setVolume(0.8);
+        std::printf("Playback started. Running for %d seconds...\n", args->seconds);
+
+        for (int i = 0; i < args->seconds; ++i)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
+        std::printf("Shutting down...\n");
+        player.stop();
+        audioOut.stop();
+        videoOut.stop();
+        return 0;
     }
 } // namespace
 
 int main(int argc, char **argv)
 {
-    std::string source = argc > 1 ? argv[1] : kSampleClipPath;
+    const std::string source = argc > 1 ? argv[1] : resolveSampleClip();
     const int seconds = argc > 2 ? std::atoi(argv[2]) : 30;
 
-    // Prefer the bundled clip when it exists, otherwise fall back to a URL.
-    if (argc == 1)
-    {
-        std::FILE *probe = std::fopen(kSampleClipPath, "rb");
-        if (probe)
-        {
-            std::fclose(probe);
-        }
-        else
-        {
-            source = kFallbackUrl;
-        }
-    }
-
-    SimpleMedia::AudioOutput audioOut;
-    SimpleMedia::VideoPlayer player;
-    player.setFrameCallback(onVideoFrameReceived);
-    //player.setAudioCallback(onAudioFrameReceived);
-    player.setAudioCallback([&audioOut](const SimpleMedia::AudioFrame &frame)
-                            { audioOut.write(frame); });
-
-    std::printf("Loading media source: %s\n", source.c_str());
-    if (!player.load(source))
-    {
-        std::fprintf(stderr, "Failed to build the playback pipeline.\n");
-        return 1;
-    }
-
-    audioOut.open();
-    player.play();
-    player.setVolume(0.8);
-    std::printf("Playback started. Running for %d seconds...\n", seconds);
-
-    for (int i = 0; i < seconds; ++i)
-    {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-
-    std::printf("Shutting down...\n");
-    player.stop();
-    audioOut.stop();
-    return 0;
+    PlayArgs args{source, seconds};
+    return SimpleMedia::runMain(runPlayback, &args);
 }
